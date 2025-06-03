@@ -6,7 +6,7 @@ local SLIDE_ANIMATION_DURATION = 0.2
 local FAST_ANIMATION_DURATION = 0.08
 local DESKTOP_TRANSITION_DELAY = 0.05
 local WINDOW_FOCUS_DELAY = 0.15
-local ALERT_DELAY = 0.5
+local ALERT_DELAY = 0.50
 local ALERT_DURATION = 0.8
 
 -- Helper function to get window and space information
@@ -73,16 +73,24 @@ end
 -- Function to create visual displacement by window width
 function slideWindowByWidth(window, direction, callback)
     local originalFrame = window:frame()
+    local screen = window:screen()
+    local screenFrame = screen:frame()
     
-    -- Calculate final position (displace by the window's width)
+    -- Calculate final position (displace by the window's width or available space)
     local targetFrame = hs.geometry.copy(originalFrame)
     
     if direction == "right" then
-        -- Move to the right by the full width of the window
-        targetFrame.x = originalFrame.x + originalFrame.w
+        -- Calculate available space to the right
+        local availableSpace = (screenFrame.x + screenFrame.w) - (originalFrame.x + originalFrame.w)
+        -- Move by window width or available space, whichever is smaller
+        local displacement = math.min(originalFrame.w, availableSpace)
+        targetFrame.x = originalFrame.x + displacement
     else -- direction == "left"
-        -- Move to the left by the full width of the window
-        targetFrame.x = originalFrame.x - originalFrame.w
+        -- Calculate available space to the left
+        local availableSpace = originalFrame.x - screenFrame.x
+        -- Move by window width or available space, whichever is smaller
+        local displacement = math.min(originalFrame.w, availableSpace)
+        targetFrame.x = originalFrame.x - displacement
     end
     
     -- Configure smooth and fast animation
@@ -195,4 +203,4 @@ end)
 hs.window.animationDuration = FAST_ANIMATION_DURATION  -- Faster animations globally
 
 -- Confirmation message when loading the script
-hs.alert.show("Script loaded", 1.5)
+-- hs.alert.show("Script loaded", 1.5) -- uncomment to "debug"
