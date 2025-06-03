@@ -9,7 +9,6 @@ A smooth and elegant macOS window management tool that moves windows between des
 ## ✨ Features
 
 - **Smooth Visual Transitions**: Windows slide horizontally before moving to the next desktop
-- **Circular Navigation**: Seamlessly loop through all available desktops
 - **Native macOS Integration**: Uses system `Ctrl + Arrow` transitions for authentic feel
 - **Fast Alternative**: Quick movement options without visual effects
 - **Lightweight**: Minimal resource usage
@@ -100,12 +99,17 @@ end)
 Modify the animation duration:
 
 ```lua
+-- Constants
 local SLIDE_ANIMATION_DURATION = 0.2
 local FAST_ANIMATION_DURATION = 0.08
+local BOUNCE_ANIMATION_DURATION = 0.15
+local BOUNCE_RETURN_DURATION = 0.12
 local DESKTOP_TRANSITION_DELAY = 0.05
 local WINDOW_FOCUS_DELAY = 0.15
 local ALERT_DELAY = 0.50
 local ALERT_DURATION = 0.8
+local BOUNCE_DISTANCE = 60  -- Distance for bounce animation in pixels
+local MIN_SLIDE_DISTANCE = 50  -- Minimum slide displacement when near screen edges
 ```
 
 
