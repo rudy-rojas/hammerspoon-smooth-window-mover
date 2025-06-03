@@ -97,23 +97,17 @@ end)
 
 ### Adjusting Animation Speed
 
-Modify the animation duration in the `slideWindowByWidth` function:
+Modify the animation duration:
 
 ```lua
--- Faster animation (0.1 seconds)
-hs.window.animationDuration = 0.1
-
--- Slower animation (0.5 seconds)
-hs.window.animationDuration = 0.5
+local SLIDE_ANIMATION_DURATION = 0.2
+local FAST_ANIMATION_DURATION = 0.08
+local DESKTOP_TRANSITION_DELAY = 0.05
+local WINDOW_FOCUS_DELAY = 0.15
+local ALERT_DELAY = 0.50
+local ALERT_DURATION = 0.8
 ```
 
-### Disabling Visual Feedback
-
-Remove or comment out alert messages:
-
-```lua
--- hs.alert.show(string.format("Window moved to Desktop %d", nextIndex), 0.8)
-```
 
 ## 📋 Requirements
 
@@ -125,25 +119,11 @@ Remove or comment out alert messages:
 ## 🔧 Troubleshooting
 
 ### Script Not Working
+
 1. **Restart Hammerspoon** completely (Quit and relaunch)
 2. **Verify permissions**: System Preferences → Security & Privacy → Privacy → Accessibility
 3. **Reload configuration**: Hammerspoon menu → Reload Config
 4. **Test with simple window**: Try with TextEdit or similar basic app
-
-### Animation Not Smooth
-1. **Check system performance**: Close unnecessary apps
-2. **Adjust animation duration**: Increase `hs.window.animationDuration` value
-3. **Use fast version**: Try the `up/down arrow` shortcuts instead
-
-### Desktop Transition Fails
-1. **Verify System Preferences**: Mission Control → "When switching to an application, switch to a Space with open windows for the application" (uncheck this)
-2. **Check desktop count**: Ensure you have at least 2 desktops/spaces
-3. **Test manual transition**: Try `Ctrl + →` manually first
-
-### Window Doesn't Move
-1. **Check window type**: Some apps (like System Preferences) resist automation
-2. **Try different applications**: Test with Safari, Chrome, or TextEdit
-3. **Verify active window**: Ensure the window is focused before using shortcut
 
 ## 🎯 Use Cases
 
