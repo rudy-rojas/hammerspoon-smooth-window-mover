@@ -1,54 +1,23 @@
 -- Configuration for moving window to next desktop with smooth transition
 -- Key combination: shift + ctrl + opt + cmd + right arrow
 
--- Function to create visual displacement by window width
-function slideWindowByWidth(window, direction, callback)
-    local originalFrame = window:frame()
-    
-    -- Calculate final position (displace by the window's width)
-    local targetFrame = hs.geometry.copy(originalFrame)
-    
-    if direction == "right" then
-        -- Move to the right by the full width of the window
-        targetFrame.x = originalFrame.x + originalFrame.w
-    else -- direction == "left"
-        -- Move to the left by the full width of the window
-        targetFrame.x = originalFrame.x - originalFrame.w
-    end
-    
-    -- Configure smooth and fast animation
-    hs.window.animationDuration = 0.2  -- Duration of displacement (faster)
-    
-    -- Animate the window by its width
-    window:setFrame(targetFrame, hs.window.animationDuration)
-    
-    -- After the animation finishes, execute callback
-    hs.timer.doAfter(hs.window.animationDuration + 0.05, function()
-        if callback then
-            callback(originalFrame)  -- Pass the original position to the callback
-        end
-    end)
-end
+-- Constants
+local SLIDE_ANIMATION_DURATION = 0.2
+local FAST_ANIMATION_DURATION = 0.08
+local DESKTOP_TRANSITION_DELAY = 0.05
+local WINDOW_FOCUS_DELAY = 0.15
+local ALERT_DELAY = 0.5
+local ALERT_DURATION = 0.8
 
--- Main function to move window to next desktop
-function moveWindowToNextDesktop()
-    local win = hs.window.focusedWindow()
-    
+-- Helper function to get window and space information
+local function getWindowSpaceInfo(win)
     if not win then
-        hs.alert.show("No active window")
-        return
+        return nil, "No active window"
     end
     
-    -- Get current window information
-    local app = win:application()
-    local windowTitle = win:title()
-    local windowFrame = win:frame()
-    
-    -- Get current space
     local currentSpaces = hs.spaces.windowSpaces(win)
     if not currentSpaces or #currentSpaces == 0 then
-        hs.alert.show("Could not get current space")
-        return
+        return nil, "Could not get current space"
     end
     
     local currentSpace = currentSpaces[1]
@@ -67,8 +36,7 @@ function moveWindowToNextDesktop()
     end
     
     if not screenSpaces or #screenSpaces < 2 then
-        hs.alert.show("Only one desktop available")
-        return
+        return nil, "Only one desktop available"
     end
     
     -- Find the index of the current space
@@ -81,241 +49,124 @@ function moveWindowToNextDesktop()
     end
     
     if not currentIndex then
-        hs.alert.show("Could not determine current desktop")
+        return nil, "Could not determine current desktop"
+    end
+    
+    return {
+        currentSpace = currentSpace,
+        screenSpaces = screenSpaces,
+        currentIndex = currentIndex
+    }
+end
+
+-- Helper function to calculate target desktop index
+local function getTargetIndex(currentIndex, totalSpaces, direction)
+    if direction == "next" then
+        local nextIndex = currentIndex + 1
+        return nextIndex > totalSpaces and 1 or nextIndex
+    else -- direction == "prev"
+        local prevIndex = currentIndex - 1
+        return prevIndex < 1 and totalSpaces or prevIndex
+    end
+end
+
+-- Function to create visual displacement by window width
+function slideWindowByWidth(window, direction, callback)
+    local originalFrame = window:frame()
+    
+    -- Calculate final position (displace by the window's width)
+    local targetFrame = hs.geometry.copy(originalFrame)
+    
+    if direction == "right" then
+        -- Move to the right by the full width of the window
+        targetFrame.x = originalFrame.x + originalFrame.w
+    else -- direction == "left"
+        -- Move to the left by the full width of the window
+        targetFrame.x = originalFrame.x - originalFrame.w
+    end
+    
+    -- Configure smooth and fast animation
+    hs.window.animationDuration = SLIDE_ANIMATION_DURATION
+    
+    -- Animate the window by its width
+    window:setFrame(targetFrame, hs.window.animationDuration)
+    
+    -- After the animation finishes, execute callback
+    hs.timer.doAfter(hs.window.animationDuration + 0.05, function()
+        if callback then
+            callback(originalFrame)  -- Pass the original position to the callback
+        end
+    end)
+end
+
+-- Generic function to move window to desktop with optional visual effect
+local function moveWindowToDesktop(direction, withVisualEffect)
+    local win = hs.window.focusedWindow()
+    
+    local spaceInfo, errorMsg = getWindowSpaceInfo(win)
+    if not spaceInfo then
+        if errorMsg and withVisualEffect then
+            hs.alert.show(errorMsg)
+        end
         return
     end
     
-    -- Calculate next space (circular)
-    local nextIndex = currentIndex + 1
-    if nextIndex > #screenSpaces then
-        nextIndex = 1  -- Return to first desktop
-    end
+    local targetIndex = getTargetIndex(spaceInfo.currentIndex, #spaceInfo.screenSpaces, direction)
+    local targetSpace = spaceInfo.screenSpaces[targetIndex]
+    local originalFrame = win:frame()
     
-    local nextSpace = screenSpaces[nextIndex]
+    -- Determine control key for desktop transition
+    local controlKey = (direction == "next") and "right" or "left"
     
-    -- Create callback for after visual displacement
-    local afterSlideCallback = function(originalFrame)
-        -- Move the window to the next space
-        hs.spaces.moveWindowToSpace(win, nextSpace)
+    -- Function to execute after slide (or immediately for fast version)
+    local executeTransition = function(frameToRestore)
+        -- Move the window to the target space
+        hs.spaces.moveWindowToSpace(win, targetSpace)
         
-        -- Execute desktop transition with Ctrl + Right
-        hs.eventtap.keyStroke({"ctrl"}, "right", 0)
+        -- Execute desktop transition
+        hs.eventtap.keyStroke({"ctrl"}, controlKey, 0)
         
         -- After transition, reposition the window and show message in destination desktop
-        hs.timer.doAfter(0.05, function()  -- Increased delay to ensure desktop transition is complete
-            win:setFrame(originalFrame, 0.1)  -- Restore original position
+        hs.timer.doAfter(DESKTOP_TRANSITION_DELAY, function()
+            win:setFrame(frameToRestore, withVisualEffect and 0.1 or 0.05)
             
-            hs.timer.doAfter(0.15, function()
+            hs.timer.doAfter(WINDOW_FOCUS_DELAY, function()
                 win:focus()
-                -- Show visual feedback in the destination desktop (after window is focused)
-                hs.timer.doAfter(0.5, function()
-                    hs.alert.show(string.format("     Desktop %d     ", nextIndex), 0.8)
+                -- Show visual feedback in the destination desktop
+                local alertDelay = withVisualEffect and ALERT_DELAY or 0.1
+                hs.timer.doAfter(alertDelay, function()
+                    hs.alert.show(string.format("     Desktop %d     ", targetIndex), ALERT_DURATION)
                 end)
             end)
         end)
     end
     
-    -- Execute visual displacement to the right followed by transition
-    slideWindowByWidth(win, "right", afterSlideCallback)
+    if withVisualEffect then
+        -- Execute with visual displacement
+        local slideDirection = (direction == "next") and "right" or "left"
+        slideWindowByWidth(win, slideDirection, executeTransition)
+    else
+        -- Execute fast transition without visual effect
+        hs.window.animationDuration = FAST_ANIMATION_DURATION
+        executeTransition(originalFrame)
+    end
 end
 
--- Function to move window to previous desktop
+-- Main functions using the generic function
+function moveWindowToNextDesktop()
+    moveWindowToDesktop("next", true)
+end
+
 function moveWindowToPrevDesktop()
-    local win = hs.window.focusedWindow()
-    
-    if not win then 
-        hs.alert.show("No active window")
-        return 
-    end
-    
-    local windowFrame = win:frame()
-    local currentSpaces = hs.spaces.windowSpaces(win)
-    if not currentSpaces or #currentSpaces == 0 then return end
-    
-    local currentSpace = currentSpaces[1]
-    local allSpaces = hs.spaces.allSpaces()
-    
-    local screenSpaces = nil
-    for screenUUID, spaces in pairs(allSpaces) do
-        for _, spaceID in ipairs(spaces) do
-            if spaceID == currentSpace then
-                screenSpaces = spaces
-                break
-            end
-        end
-        if screenSpaces then break end
-    end
-    
-    if not screenSpaces or #screenSpaces < 2 then return end
-    
-    local currentIndex = nil
-    for i, spaceID in ipairs(screenSpaces) do
-        if spaceID == currentSpace then
-            currentIndex = i
-            break
-        end
-    end
-    
-    local prevIndex = currentIndex - 1
-    if prevIndex < 1 then
-        prevIndex = #screenSpaces
-    end
-    
-    local prevSpace = screenSpaces[prevIndex]
-    
-    -- Create callback for after visual displacement
-    local afterSlideCallback = function(originalFrame)
-        -- Capture prevIndex value for use in the callback
-        local targetDesktop = prevIndex
-        
-        -- Move the window to the previous space
-        hs.spaces.moveWindowToSpace(win, prevSpace)
-        
-        -- Execute desktop transition with Ctrl + Left
-        hs.eventtap.keyStroke({"ctrl"}, "left", 0)
-        
-        -- After transition, reposition the window and show message in destination desktop
-        hs.timer.doAfter(0.05, function()  -- Increased delay to ensure desktop transition is complete
-            win:setFrame(originalFrame, 0.1)  -- Restore original position
-            
-            hs.timer.doAfter(0.15, function()
-                win:focus()
-                -- Show visual feedback in the destination desktop (after window is focused)
-                hs.timer.doAfter(0.5, function()
-                    hs.alert.show(string.format("     Desktop %d     ", targetDesktop), 0.8)
-                end)
-            end)
-        end)
-    end
-    
-    -- Execute visual displacement to the left followed by transition
-    slideWindowByWidth(win, "left", afterSlideCallback)
+    moveWindowToDesktop("prev", true)
 end
 
--- Alternative function with more direct and fast transition (WITHOUT visual displacement)
 function moveWindowToNextDesktopFast()
-    local win = hs.window.focusedWindow()
-    
-    if not win then
-        return
-    end
-    
-    local currentSpaces = hs.spaces.windowSpaces(win)
-    if not currentSpaces or #currentSpaces == 0 then
-        return
-    end
-    
-    local currentSpace = currentSpaces[1]
-    local allSpaces = hs.spaces.allSpaces()
-    
-    -- Find spaces for current monitor
-    local screenSpaces = nil
-    for screenUUID, spaces in pairs(allSpaces) do
-        for _, spaceID in ipairs(spaces) do
-            if spaceID == currentSpace then
-                screenSpaces = spaces
-                break
-            end
-        end
-        if screenSpaces then break end
-    end
-    
-    if not screenSpaces or #screenSpaces < 2 then
-        return
-    end
-    
-    -- Find next space
-    local currentIndex = nil
-    for i, spaceID in ipairs(screenSpaces) do
-        if spaceID == currentSpace then
-            currentIndex = i
-            break
-        end
-    end
-    
-    local nextIndex = currentIndex + 1
-    if nextIndex > #screenSpaces then
-        nextIndex = 1
-    end
-    
-    local nextSpace = screenSpaces[nextIndex]
-    local originalFrame = win:frame()
-    
-    -- Ultra fast transition
-    hs.window.animationDuration = 0.08
-    
-    -- Move window and change desktop almost simultaneously
-    hs.spaces.moveWindowToSpace(win, nextSpace)
-    hs.eventtap.keyStroke({"ctrl"}, "right", 0)
-    
-    -- Reposition window and show message in destination desktop
-    hs.timer.doAfter(0.15, function()  -- Increased delay for desktop transition
-        win:setFrame(originalFrame, 0.05)
-        win:focus()
-        -- Show message in destination desktop
-        hs.timer.doAfter(0.1, function()
-            hs.alert.show(string.format("     Desktop %d     ", nextIndex), 0.8)
-        end)
-    end)
+    moveWindowToDesktop("next", false)
 end
 
--- Fast function for previous desktop (WITHOUT visual displacement)
 function moveWindowToPrevDesktopFast()
-    local win = hs.window.focusedWindow()
-    
-    if not win then return end
-    
-    local currentSpaces = hs.spaces.windowSpaces(win)
-    if not currentSpaces or #currentSpaces == 0 then return end
-    
-    local currentSpace = currentSpaces[1]
-    local allSpaces = hs.spaces.allSpaces()
-    
-    local screenSpaces = nil
-    for screenUUID, spaces in pairs(allSpaces) do
-        for _, spaceID in ipairs(spaces) do
-            if spaceID == currentSpace then
-                screenSpaces = spaces
-                break
-            end
-        end
-        if screenSpaces then break end
-    end
-    
-    if not screenSpaces or #screenSpaces < 2 then return end
-    
-    local currentIndex = nil
-    for i, spaceID in ipairs(screenSpaces) do
-        if spaceID == currentSpace then
-            currentIndex = i
-            break
-        end
-    end
-    
-    local prevIndex = currentIndex - 1
-    if prevIndex < 1 then
-        prevIndex = #screenSpaces
-    end
-    
-    local prevSpace = screenSpaces[prevIndex]
-    local originalFrame = win:frame()
-    
-    -- Capture prevIndex for use in callback
-    local targetDesktop = prevIndex
-    
-    hs.window.animationDuration = 0.08
-    hs.spaces.moveWindowToSpace(win, prevSpace)
-    hs.eventtap.keyStroke({"ctrl"}, "left", 0)
-    
-    -- Reposition window and show message in destination desktop
-    hs.timer.doAfter(0.15, function()  -- Increased delay for desktop transition
-        win:setFrame(originalFrame, 0.05)
-        win:focus()
-        -- Show message in destination desktop
-        hs.timer.doAfter(0.1, function()
-            hs.alert.show(string.format("     Desktop %d     ", targetDesktop), 0.8)
-        end)
-    end)
+    moveWindowToDesktop("prev", false)
 end
 
 -- Configure main keyboard shortcuts (WITH visual displacement)
@@ -341,7 +192,7 @@ hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "down", function()
 end)
 
 -- Additional configuration to optimize transitions
-hs.window.animationDuration = 0.08  -- Faster animations globally
+hs.window.animationDuration = FAST_ANIMATION_DURATION  -- Faster animations globally
 
 -- Confirmation message when loading the script
 hs.alert.show("Script loaded", 1.5)
