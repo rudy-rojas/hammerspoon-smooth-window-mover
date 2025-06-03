@@ -101,17 +101,18 @@ function moveWindowToNextDesktop()
         -- Execute desktop transition with Ctrl + Right
         hs.eventtap.keyStroke({"ctrl"}, "right", 0)
         
-        -- After transition, reposition the window
-        hs.timer.doAfter(0.15, function()
+        -- After transition, reposition the window and show message in destination desktop
+        hs.timer.doAfter(0.05, function()  -- Increased delay to ensure desktop transition is complete
             win:setFrame(originalFrame, 0.1)  -- Restore original position
             
-            hs.timer.doAfter(0.05, function()
+            hs.timer.doAfter(0.15, function()
                 win:focus()
+                -- Show visual feedback in the destination desktop (after window is focused)
+                hs.timer.doAfter(0.5, function()
+                    hs.alert.show(string.format("     Desktop %d     ", nextIndex), 0.8)
+                end)
             end)
         end)
-        
-        -- Show visual feedback
-        hs.alert.show(string.format("Window moved to Desktop %d", nextIndex), 0.8)
     end
     
     -- Execute visual displacement to the right followed by transition
@@ -164,23 +165,27 @@ function moveWindowToPrevDesktop()
     
     -- Create callback for after visual displacement
     local afterSlideCallback = function(originalFrame)
+        -- Capture prevIndex value for use in the callback
+        local targetDesktop = prevIndex
+        
         -- Move the window to the previous space
         hs.spaces.moveWindowToSpace(win, prevSpace)
         
         -- Execute desktop transition with Ctrl + Left
         hs.eventtap.keyStroke({"ctrl"}, "left", 0)
         
-        -- After transition, reposition the window
-        hs.timer.doAfter(0.15, function()
+        -- After transition, reposition the window and show message in destination desktop
+        hs.timer.doAfter(0.05, function()  -- Increased delay to ensure desktop transition is complete
             win:setFrame(originalFrame, 0.1)  -- Restore original position
             
-            hs.timer.doAfter(0.05, function()
+            hs.timer.doAfter(0.15, function()
                 win:focus()
+                -- Show visual feedback in the destination desktop (after window is focused)
+                hs.timer.doAfter(0.5, function()
+                    hs.alert.show(string.format("     Desktop %d     ", targetDesktop), 0.8)
+                end)
             end)
         end)
-        
-        -- Show visual feedback
-        hs.alert.show(string.format("Window moved to Desktop %d", prevIndex), 0.8)
     end
     
     -- Execute visual displacement to the left followed by transition
@@ -243,10 +248,14 @@ function moveWindowToNextDesktopFast()
     hs.spaces.moveWindowToSpace(win, nextSpace)
     hs.eventtap.keyStroke({"ctrl"}, "right", 0)
     
-    -- Reposition window immediately
-    hs.timer.doAfter(0.03, function()
+    -- Reposition window and show message in destination desktop
+    hs.timer.doAfter(0.15, function()  -- Increased delay for desktop transition
         win:setFrame(originalFrame, 0.05)
         win:focus()
+        -- Show message in destination desktop
+        hs.timer.doAfter(0.1, function()
+            hs.alert.show(string.format("     Desktop %d     ", nextIndex), 0.8)
+        end)
     end)
 end
 
@@ -291,13 +300,21 @@ function moveWindowToPrevDesktopFast()
     local prevSpace = screenSpaces[prevIndex]
     local originalFrame = win:frame()
     
+    -- Capture prevIndex for use in callback
+    local targetDesktop = prevIndex
+    
     hs.window.animationDuration = 0.08
     hs.spaces.moveWindowToSpace(win, prevSpace)
     hs.eventtap.keyStroke({"ctrl"}, "left", 0)
     
-    hs.timer.doAfter(0.03, function()
+    -- Reposition window and show message in destination desktop
+    hs.timer.doAfter(0.15, function()  -- Increased delay for desktop transition
         win:setFrame(originalFrame, 0.05)
         win:focus()
+        -- Show message in destination desktop
+        hs.timer.doAfter(0.1, function()
+            hs.alert.show(string.format("     Desktop %d     ", targetDesktop), 0.8)
+        end)
     end)
 end
 
@@ -327,4 +344,4 @@ end)
 hs.window.animationDuration = 0.08  -- Faster animations globally
 
 -- Confirmation message when loading the script
-hs.alert.show("Script with horizontal slide displacement loaded", 1.5)
+hs.alert.show("Script loaded", 1.5)
