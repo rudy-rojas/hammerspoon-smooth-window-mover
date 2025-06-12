@@ -13,6 +13,119 @@ local ALERT_DURATION = 0.8
 local BOUNCE_DISTANCE = 60  -- Distance for bounce animation in pixels
 local MIN_SLIDE_DISTANCE = 50  -- Minimum slide displacement when near screen edges
 
+-- Canvas management variables (reused from workspace switcher)
+local activeCanvas = {}
+local canvasCleanupTimer = nil
+
+-- =============================================================================
+-- CANVAS ALERT SYSTEM (reused from workspace switcher script)
+-- =============================================================================
+
+-- Function to get ordered monitors (reusable)
+local function getOrderedMonitors()
+    local screens = hs.screen.allScreens()
+    local primaryScreen = hs.screen.primaryScreen()
+    
+    table.sort(screens, function(a, b)
+        if a == primaryScreen then return true end
+        if b == primaryScreen then return false end
+        return a:name() < b:name()
+    end)
+    
+    return screens
+end
+
+local function clearAllCanvas()
+    for i = #activeCanvas, 1, -1 do
+        local canvas = activeCanvas[i]
+        if canvas then
+            canvas:delete()
+        end
+        table.remove(activeCanvas, i)
+    end
+end
+
+-- Enhanced function to show alert with canvas management
+function showCanvasAlert(message, targetMonitor, duration)
+    -- Clean previous canvas before creating a new one
+    clearAllCanvas()
+    
+    local screens = getOrderedMonitors()
+    local targetScreen = nil
+    
+    -- If targetMonitor is a number, get the screen by index
+    if type(targetMonitor) == "number" then
+        targetScreen = screens[targetMonitor]
+    else
+        -- If targetMonitor is a screen object, use it directly
+        targetScreen = targetMonitor
+    end
+    
+    -- If no target screen specified, use the current screen
+    if not targetScreen then
+        targetScreen = hs.screen.mainScreen()
+    end
+    
+    if not targetScreen then return end
+
+    local frame = targetScreen:frame()
+    local width, height = 200, 50  -- Slightly wider for desktop messages
+    local x = frame.x + (frame.w - width) / 2
+    local y = frame.y + (frame.h - height) / 4
+
+    local textSize = 18
+    local textHeight = textSize + 6
+    local textY = (height - textHeight) / 2
+
+    local canvas = hs.canvas.new{
+        x = x, y = y, w = width, h = height
+    }:appendElements({
+        type = "rectangle",
+        action = "fill",
+        fillColor = {red=0, green=0, blue=0, alpha=0.8},
+        roundedRectRadii = {xRadius=12, yRadius=12}
+    },{
+        type = "text",
+        text = message,
+        textSize = textSize,
+        textColor = {white=1, alpha=1},
+        textAlignment = "center",
+        frame = {x=0, y=textY, w=width, h=textHeight}
+    })
+
+    canvas:level(hs.canvas.windowLevels.overlay)
+    canvas:show()
+    
+    -- Add canvas to tracking table
+    table.insert(activeCanvas, canvas)
+
+    -- Cancel previous timer if exists
+    if canvasCleanupTimer then
+        canvasCleanupTimer:stop()
+        canvasCleanupTimer = nil
+    end
+
+    -- Create new timer to clean up
+    canvasCleanupTimer = hs.timer.doAfter(duration or 1.0, function()
+        clearAllCanvas()
+        canvasCleanupTimer = nil
+    end)
+end
+
+-- Forced cleanup function (useful for debugging)
+function clearCanvas()
+    clearAllCanvas()
+    if canvasCleanupTimer then
+        canvasCleanupTimer:stop()
+        canvasCleanupTimer = nil
+    end
+    print("Canvas cleaned manually")
+end
+
+-- =============================================================================
+-- WINDOW MOVEMENT FUNCTIONS (original functionality)
+-- =============================================================================
+
 -- Helper function to get window and space information
 local function getWindowSpaceInfo(win)
     if not win then
@@ -163,7 +276,8 @@ local function moveWindowToDesktop(direction, withVisualEffect)
     local spaceInfo, errorMsg = getWindowSpaceInfo(win)
     if not spaceInfo then
         if errorMsg and withVisualEffect then
-            hs.alert.show(errorMsg)
+            -- Use canvas alert instead of hs.alert.show
+            showCanvasAlert(errorMsg, win and win:screen(), ALERT_DURATION)
         end
         return
     end
@@ -174,19 +288,12 @@ local function moveWindowToDesktop(direction, withVisualEffect)
     if status ~= "valid" then
         if withVisualEffect then
             local slideDirection = (direction == "next") and "right" or "left"
-            -- local bounceMessage = (status == "at_last") and 
-            --     string.format("     Already at last desktop (%d)     ", #spaceInfo.screenSpaces) or
-            --     "     Already at first desktop (1)     "
             
             bounceWindow(win, slideDirection, function()
-                -- hs.alert.show(bounceMessage, ALERT_DURATION)
+                -- Only bounce effect, no message
             end)
         else
-            -- For fast version, just show the message without bounce
-            -- local bounceMessage = (status == "at_last") and 
-            --     string.format("Already at last desktop (%d)", #spaceInfo.screenSpaces) or
-            --     "Already at first desktop (1)"
-            -- hs.alert.show(bounceMessage, 0.5)
+            -- For fast version, do nothing (no bounce, no message)
         end
         return
     end
@@ -194,6 +301,7 @@ local function moveWindowToDesktop(direction, withVisualEffect)
     -- Continue with normal movement if valid
     local targetSpace = spaceInfo.screenSpaces[targetIndex]
     local originalFrame = win:frame()
+    local windowScreen = win:screen()
     
     -- Determine control key for desktop transition
     local controlKey = (direction == "next") and "right" or "left"
@@ -212,10 +320,11 @@ local function moveWindowToDesktop(direction, withVisualEffect)
             
             hs.timer.doAfter(WINDOW_FOCUS_DELAY, function()
                 win:focus()
-                -- Show visual feedback in the destination desktop
+                -- Show visual feedback in the destination desktop using canvas
                 local alertDelay = withVisualEffect and ALERT_DELAY or 0.1
                 hs.timer.doAfter(alertDelay, function()
-                    hs.alert.show(string.format("     Desktop %d     ", targetIndex), ALERT_DURATION)
+                    -- Use canvas alert instead of hs.alert.show
+                    showCanvasAlert(string.format("Desktop %d", targetIndex), windowScreen, ALERT_DURATION)
                 end)
             end)
         end)
@@ -249,6 +358,10 @@ function moveWindowToPrevDesktopFast()
     moveWindowToDesktop("prev", false)
 end
 
+-- =============================================================================
+-- KEYBOARD SHORTCUTS
+-- =============================================================================
+
 -- Configure main keyboard shortcuts (WITH visual displacement)
 -- shift + ctrl + opt + cmd + right arrow
 hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "right", function()
@@ -271,8 +384,48 @@ hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "down", function()
     moveWindowToPrevDesktopFast()  -- WITHOUT visual displacement
 end)
 
+-- =============================================================================
+-- CONTROL FUNCTIONS
+-- =============================================================================
+
+-- Window mover control functions
+hs.windowMover = {
+    clearCanvas = clearCanvas,
+    moveNext = moveWindowToNextDesktop,
+    movePrev = moveWindowToPrevDesktop,
+    moveNextFast = moveWindowToNextDesktopFast,
+    movePrevFast = moveWindowToPrevDesktopFast,
+    test = function()
+        local win = hs.window.focusedWindow()
+        if win then
+            showCanvasAlert("Window Mover Test", win:screen(), 2.0)
+        else
+            showCanvasAlert("No focused window", nil, 2.0)
+        end
+    end,
+    status = function()
+        print("Window Mover Status:")
+        print("- Active canvas:", #activeCanvas)
+        local win = hs.window.focusedWindow()
+        if win then
+            print("- Focused window:", win:title())
+            print("- Window screen:", win:screen():name())
+        else
+            print("- No focused window")
+        end
+    end
+}
+
 -- Additional configuration to optimize transitions
 hs.window.animationDuration = FAST_ANIMATION_DURATION  -- Faster animations globally
 
+-- Clean canvas when reloading script
+clearAllCanvas()
+
 -- Confirmation message when loading the script
--- hs.alert.show("Script loaded", 1.5) -- uncomment to "debug"
+-- print("=== WINDOW MOVER WITH CANVAS ALERTS LOADED ===")
+-- print("• shift + ctrl + alt + cmd + arrows: Move with animation")
+-- print("• shift + ctrl + alt + cmd + up/down: Fast move")
+-- print("• Use hs.windowMover.test() to test canvas")
+-- print("• Use hs.windowMover.clearCanvas() to clear stuck canvas")
+-- print("====================================================")
