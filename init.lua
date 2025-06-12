@@ -2,7 +2,15 @@
 -- UNIFIED WORKSPACE & WINDOW MOVER SCRIPT - ENHANCED VERSION
 -- =============================================================================
 -- Combines workspace switcher (Ctrl+number) and window mover (Shift+Ctrl+Alt+Cmd+arrows)
--- Now includes automatic detection of disabled shortcuts
+
+-- =============================================================================
+--               SETTINGS
+-- =============================================================================
+
+-- local WINDOW_MOVER_MODIFIERS = {"shift", "ctrl", "alt", "cmd"} --DEFAULT
+-- local WINDOW_MOVER_MODIFIERS = {"shift", "ctrl"} -- example
+local WINDOW_MOVER_MODIFIERS = {"shift", "ctrl", "alt", "cmd"}
+showAlert = true
 
 -- =============================================================================
 -- SHARED VARIABLES AND CONSTANTS
@@ -14,8 +22,6 @@ desktopIds = {}
 currentMonitor = 1
 currentDesktop = 1
 tableInitialized = false
-showAlert = true
-
 
 -- Window mover constants
 local SLIDE_ANIMATION_DURATION = 0.2
@@ -696,10 +702,10 @@ spaceWatcher:start()
 getSpacesPerMonitor()
 
 -- Configure keyboard shortcuts for window mover
-hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "right", moveWindowToNextDesktop)
-hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "left", moveWindowToPrevDesktop)
-hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "up", moveWindowToNextDesktopFast)
-hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "down", moveWindowToPrevDesktopFast)
+hs.hotkey.bind(WINDOW_MOVER_MODIFIERS, "right", moveWindowToNextDesktop)
+hs.hotkey.bind(WINDOW_MOVER_MODIFIERS, "left", moveWindowToPrevDesktop)
+hs.hotkey.bind(WINDOW_MOVER_MODIFIERS, "up", moveWindowToNextDesktopFast)
+hs.hotkey.bind(WINDOW_MOVER_MODIFIERS, "down", moveWindowToPrevDesktopFast)
 
 -- Control interfaces
 hs.ctrlListener = {
