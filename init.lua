@@ -1,7 +1,23 @@
--- Configuration for moving window to next desktop with smooth transition
--- Key combination: shift + ctrl + opt + cmd + right arrow
+-- =============================================================================
+-- UNIFIED WORKSPACE & WINDOW MOVER SCRIPT - ENHANCED VERSION
+-- =============================================================================
+-- Combines workspace switcher (Ctrl+number) and window mover (Shift+Ctrl+Alt+Cmd+arrows)
+-- Now includes automatic detection of disabled shortcuts
 
--- Constants
+-- =============================================================================
+-- SHARED VARIABLES AND CONSTANTS
+-- =============================================================================
+
+-- Workspace switcher variables
+spacesPerMonitor = {}
+desktopIds = {}
+currentMonitor = 1
+currentDesktop = 1
+tableInitialized = false
+showAlert = true
+
+
+-- Window mover constants
 local SLIDE_ANIMATION_DURATION = 0.2
 local FAST_ANIMATION_DURATION = 0.08
 local BOUNCE_ANIMATION_DURATION = 0.15
@@ -10,18 +26,22 @@ local DESKTOP_TRANSITION_DELAY = 0.05
 local WINDOW_FOCUS_DELAY = 0.15
 local ALERT_DELAY = 0.50
 local ALERT_DURATION = 0.8
-local BOUNCE_DISTANCE = 60  -- Distance for bounce animation in pixels
-local MIN_SLIDE_DISTANCE = 50  -- Minimum slide displacement when near screen edges
+local BOUNCE_DISTANCE = 60
+local MIN_SLIDE_DISTANCE = 50
 
--- Canvas management variables (reused from workspace switcher)
+-- Shortcut detection constants
+local SHORTCUT_VERIFICATION_TIMEOUT = 0.3
+local SHORTCUT_VERIFICATION_ATTEMPTS = 3
+
+-- Shared canvas management
 local activeCanvas = {}
 local canvasCleanupTimer = nil
 
 -- =============================================================================
--- CANVAS ALERT SYSTEM (reused from workspace switcher script)
+-- SHARED UTILITY FUNCTIONS
 -- =============================================================================
 
--- Function to get ordered monitors (reusable)
+-- Function to get ordered monitors (shared by both systems)
 local function getOrderedMonitors()
     local screens = hs.screen.allScreens()
     local primaryScreen = hs.screen.primaryScreen()
@@ -35,6 +55,7 @@ local function getOrderedMonitors()
     return screens
 end
 
+-- Unified canvas cleanup
 local function clearAllCanvas()
     for i = #activeCanvas, 1, -1 do
         local canvas = activeCanvas[i]
@@ -45,74 +66,86 @@ local function clearAllCanvas()
     end
 end
 
--- Enhanced function to show alert with canvas management
-function showCanvasAlert(message, targetMonitor, duration)
-    -- Clean previous canvas before creating a new one
-    clearAllCanvas()
-    
-    local screens = getOrderedMonitors()
-    local targetScreen = nil
-    
-    -- If targetMonitor is a number, get the screen by index
-    if type(targetMonitor) == "number" then
-        targetScreen = screens[targetMonitor]
-    else
-        -- If targetMonitor is a screen object, use it directly
-        targetScreen = targetMonitor
-    end
-    
-    -- If no target screen specified, use the current screen
-    if not targetScreen then
-        targetScreen = hs.screen.mainScreen()
-    end
-    
-    if not targetScreen then return end
-
-    local frame = targetScreen:frame()
-    local width, height = 200, 50  -- Slightly wider for desktop messages
-    local x = frame.x + (frame.w - width) / 2
-    local y = frame.y + (frame.h - height) / 4
-
-    local textSize = 18
-    local textHeight = textSize + 6
-    local textY = (height - textHeight) / 2
-
-    local canvas = hs.canvas.new{
-        x = x, y = y, w = width, h = height
-    }:appendElements({
-        type = "rectangle",
-        action = "fill",
-        fillColor = {red=0, green=0, blue=0, alpha=0.8},
-        roundedRectRadii = {xRadius=12, yRadius=12}
-    },{
-        type = "text",
-        text = message,
-        textSize = textSize,
-        textColor = {white=1, alpha=1},
-        textAlignment = "center",
-        frame = {x=0, y=textY, w=width, h=textHeight}
-    })
-
-    canvas:level(hs.canvas.windowLevels.overlay)
-    canvas:show()
-    
-    -- Add canvas to tracking table
-    table.insert(activeCanvas, canvas)
-
-    -- Cancel previous timer if exists
-    if canvasCleanupTimer then
-        canvasCleanupTimer:stop()
-        canvasCleanupTimer = nil
-    end
-
-    -- Create new timer to clean up
-    canvasCleanupTimer = hs.timer.doAfter(duration or 1.0, function()
+-- Unified canvas alert function with style support
+function showCanvasAlert(message, targetMonitor, duration, style)
+    if showAlert then
+        -- Clean previous canvas before creating a new one
         clearAllCanvas()
-        canvasCleanupTimer = nil
-    end)
+        
+        style = style or "workspace"  -- "workspace" or "window"
+        
+        local screens = getOrderedMonitors()
+        local targetScreen = nil
+        
+        -- Handle different target monitor types
+        if type(targetMonitor) == "number" then
+            targetScreen = screens[targetMonitor]
+        else
+            targetScreen = targetMonitor  -- Screen object
+        end
+        
+        -- Fallback to main screen if no target specified
+        if not targetScreen then
+            targetScreen = hs.screen.mainScreen()
+        end
+        
+        if not targetScreen then return end
+        -- Style-specific settings
+        local width = (style == "workspace") and 220 or 200
+        local textSize = (style == "workspace") and 18 or 18
+        local alpha = (style == "workspace") and 0.8 or 0.8
+        
+        -- Color based on message type
+        local bgColor = {red=0, green=0, blue=0, alpha=alpha}
+        local textColor = {white=1, alpha=1}
+        
+        -- Check if it's an error/warning message
+        if string.find(message:lower(), "disabled") or string.find(message:lower(), "shortcut") then
+            bgColor = {red=0.8, green=0.3, blue=0.1, alpha=alpha}  -- Orange-red for warnings
+            width = 280
+        end
+        local frame = targetScreen:frame()
+        local height = 50
+        local x = frame.x + (frame.w - width) / 2
+        local y = frame.y + (frame.h - height) / 4
+        local textHeight = textSize + 6
+        local textY = (height - textHeight) / 2
+        local canvas = hs.canvas.new{
+            x = x, y = y, w = width, h = height
+        }:appendElements({
+            type = "rectangle",
+            action = "fill",
+            fillColor = bgColor,
+            roundedRectRadii = {xRadius=12, yRadius=12}
+        },{
+            type = "text",
+            text = message,
+            textSize = textSize,
+            textColor = textColor,
+            textAlignment = "center",
+            frame = {x=0, y=textY, w=width, h=textHeight}
+        })
+        canvas:level(hs.canvas.windowLevels.overlay)
+        canvas:show()
+        
+        -- Add canvas to tracking table
+        table.insert(activeCanvas, canvas)
+        -- Cancel previous timer if exists
+        if canvasCleanupTimer then
+            canvasCleanupTimer:stop()
+            canvasCleanupTimer = nil
+        end
+        -- Create new timer to clean up
+        canvasCleanupTimer = hs.timer.doAfter(duration or 1.5, function()
+            clearAllCanvas()
+            canvasCleanupTimer = nil
+        end)
+    end
 end
 
--- Forced cleanup function (useful for debugging)
+
+
+-- Shared cleanup function
 function clearCanvas()
     clearAllCanvas()
     if canvasCleanupTimer then
@@ -122,8 +155,334 @@ function clearCanvas()
     print("Canvas cleaned manually")
 end
 
+-- Function to open Mission Control shortcuts in System Preferences
+function openMissionControlShortcuts()
+    local script = [[
+        tell application "System Preferences"
+            reveal pane id "com.apple.preference.keyboard"
+            activate
+        end tell
+        tell application "System Events"
+            tell process "System Preferences"
+                repeat with i from 1 to 20
+                    try
+                        click radio button "Shortcuts" of tab group 1 of window 1
+                        exit repeat
+                    on error
+                        delay 0.1
+                    end try
+                end repeat
+                repeat with i from 1 to 20
+                    try
+                        select (first row of table 1 of scroll area 1 of splitter group 1 of tab group 1 of window 1 whose value of static text 1 contains "Mission Control")
+                        exit repeat
+                    on error
+                        delay 0.1
+                    end try
+                end repeat
+                -- Scroll hacia abajo
+                repeat with i from 1 to 10
+                    try
+                        tell scroll area 2 of splitter group 1 of tab group 1 of window 1
+                            set value of scroll bar 1 to 1.0
+                        end tell
+                        exit repeat
+                    on error
+                        delay 0.1
+                    end try
+                end repeat
+                
+                -- Animación shake
+                set originalPosition to position of window 1
+                set originalX to item 1 of originalPosition
+                set originalY to item 2 of originalPosition
+                
+                -- Realizar el shake
+                repeat with i from 1 to 6
+                    if i mod 2 = 1 then
+                        set position of window 1 to {originalX + 10, originalY}
+                    else
+                        set position of window 1 to {originalX - 10, originalY}
+                    end if
+                    delay 0.05
+                end repeat
+                
+                -- Restaurar posición original
+                set position of window 1 to originalPosition
+            end tell
+        end tell
+    ]]
+    
+    hs.osascript.applescript(script)
+    print("Opening Mission Control shortcuts in System Preferences with shake animation...")
+end
+
 -- =============================================================================
--- WINDOW MOVEMENT FUNCTIONS (original functionality)
+-- WORKSPACE SWITCHER SYSTEM (Ctrl + number)
+-- =============================================================================
+
+-- Main function to get spaces for each monitor
+function getSpacesPerMonitor()
+    spacesPerMonitor = {}
+    desktopIds = {}
+    
+    local screens = getOrderedMonitors()
+    
+    for i, screen in ipairs(screens) do
+        local spaces = hs.spaces.spacesForScreen(screen)
+        local spaceCount = #spaces
+        spacesPerMonitor[i] = spaceCount
+        
+        for _, spaceId in ipairs(spaces) do
+            desktopIds[#desktopIds + 1] = spaceId
+        end
+    end
+    
+    tableInitialized = true
+    showTable()
+end
+
+function showTable()
+    print("=== SPACES PER MONITOR ===")
+    for i, spaces in ipairs(spacesPerMonitor) do
+        local monitorType = (i == 1) and " (Primary)" or ""
+        print(string.format("Monitor %d%s: %d spaces", i, monitorType, spaces))
+    end
+    print("Total stored IDs:", #desktopIds)
+end
+
+function update()
+    if not tableInitialized then
+        getSpacesPerMonitor()
+    else
+        print("Table already initialized. Use 'forceUpdate()' if you need to update.")
+    end
+end
+
+function forceUpdate()
+    print("Forcing spaces update...")
+    getSpacesPerMonitor()
+end
+
+function onSpaceChange()
+    local screens = getOrderedMonitors()
+    
+    if #spacesPerMonitor ~= #screens then
+        getSpacesPerMonitor()
+        return
+    end
+    
+    for i, screen in ipairs(screens) do
+        local spaces = hs.spaces.spacesForScreen(screen)
+        if #spaces ~= spacesPerMonitor[i] then
+            getSpacesPerMonitor()
+            return
+        end
+    end
+end
+
+-- Fast and silent monitor activation
+function activateMonitorSilently(targetMonitor)
+    local screens = getOrderedMonitors()
+    local targetScreen = screens[targetMonitor]
+    
+    if not targetScreen then return false end
+    
+    local originalPosition = hs.mouse.absolutePosition()
+    local currentScreen = hs.mouse.getCurrentScreen()
+    
+    if currentScreen and currentScreen:id() == targetScreen:id() then
+        return true
+    end
+    
+    local frame = targetScreen:frame()
+    local monitorCenter = {
+        x = frame.x + frame.w / 2,
+        y = frame.y + frame.h / 2
+    }
+    
+    hs.mouse.absolutePosition(monitorCenter)
+    
+    local targetWindow = nil
+    local allWindows = hs.window.allWindows()
+    
+    for _, window in ipairs(allWindows) do
+        if window and window:isVisible() and not window:isMinimized() then
+            local windowScreen = window:screen()
+            if windowScreen and windowScreen:id() == targetScreen:id() then
+                targetWindow = window
+                break
+            end
+        end
+    end
+    
+    if targetWindow then
+        targetWindow:focus()
+    else
+        hs.eventtap.leftClick(monitorCenter)
+    end
+    
+    return true
+end
+
+function determineMonitorBySpace(spaceNumber)
+    local totalSpaces = 0
+    for _, spaces in ipairs(spacesPerMonitor) do
+        totalSpaces = totalSpaces + spaces
+    end
+    
+    if spaceNumber > totalSpaces then
+        return nil
+    end
+    
+    local accumulatedSpaces = 0
+    for i, spaces in ipairs(spacesPerMonitor) do
+        accumulatedSpaces = accumulatedSpaces + spaces
+        if spaceNumber <= accumulatedSpaces then
+            return i
+        end
+    end
+    
+    return nil
+end
+
+-- Enhanced function to verify shortcut execution and detect disabled shortcuts
+function verifyShortcutExecution(spaceNumber, targetMonitor, initialSpace, callback)
+    local attempts = 0
+    local maxAttempts = SHORTCUT_VERIFICATION_ATTEMPTS
+    
+    local function checkSpaceChange()
+        attempts = attempts + 1
+        local currentSpace = hs.spaces.focusedSpace()
+        local expectedSpace = desktopIds[spaceNumber]
+        
+        if currentSpace == expectedSpace then
+            -- Shortcut worked
+            if callback then callback(true) end
+            return
+        end
+        
+        if attempts >= maxAttempts then
+            -- Shortcut appears to be disabled
+            if callback then callback(false) end
+            return
+        end
+        
+        -- Try again
+        hs.timer.doAfter(SHORTCUT_VERIFICATION_TIMEOUT / maxAttempts, checkSpaceChange)
+    end
+    
+    -- Start verification
+    checkSpaceChange()
+end
+
+function verifyAndShowAlert(spaceNumber, targetMonitor, attempts)
+    attempts = attempts or 1
+    local maxAttempts = 4
+    
+    local initialSpace = hs.spaces.focusedSpace()
+    
+    -- First, try the shortcut
+    hs.eventtap.keyStroke({"ctrl"}, tostring(spaceNumber))
+    
+    -- Wait a moment then verify if it worked
+    hs.timer.doAfter(0.1, function()
+        verifyShortcutExecution(spaceNumber, targetMonitor, initialSpace, function(success)
+            if success then
+                -- Shortcut worked, show success alert
+                local currentDesktop = hs.spaces.focusedSpace()
+                local expectedDesktop = desktopIds[spaceNumber]
+                local screens = getOrderedMonitors()
+                local targetScreen = screens[targetMonitor]
+                local currentScreen = hs.mouse.getCurrentScreen()
+                
+                local correctDesktop = (currentDesktop == expectedDesktop)
+                local correctMonitor = (currentScreen and targetScreen and currentScreen:id() == targetScreen:id())
+                
+                if correctDesktop and correctMonitor then
+                    showCanvasAlert(string.format("Desktop %d", spaceNumber), targetMonitor, 1.0, "workspace")
+                    print(string.format("✓ Alert shown correctly on Desktop %d, Monitor %d", spaceNumber, targetMonitor))
+                else
+                    -- Force position and show alert
+                    if targetScreen then
+                        local frame = targetScreen:frame()
+                        local center = {
+                            x = frame.x + frame.w / 2,
+                            y = frame.y + frame.h / 2
+                        }
+                        hs.mouse.absolutePosition(center)
+                    end
+                    
+                    hs.timer.doAfter(0.05, function()
+                        showCanvasAlert(string.format("Desktop %d", spaceNumber), targetMonitor, 1.0, "workspace")
+                        print(string.format("✓ Desktop %d activated on Monitor %d", spaceNumber, targetMonitor))
+                    end)
+                end
+            else
+                -- Shortcut didn't work - likely disabled
+                showCanvasAlert(string.format("Desktop %d shortcut is disabled", spaceNumber), targetMonitor, 2.0, "workspace")
+                print(string.format("⚠ Desktop %d shortcut appears to be disabled in System Preferences", spaceNumber))
+                
+                -- Automatically open Mission Control shortcuts after a brief delay
+                hs.timer.doAfter(2.5, function()
+                    openMissionControlShortcuts()
+                end)
+            end
+        end)
+    end)
+end
+
+-- Key code mapping and control variables
+local numberKeyCodes = {
+    [18] = 1, [19] = 2, [20] = 3, [21] = 4, [23] = 5,
+    [22] = 6, [26] = 7, [28] = 8, [25] = 9
+}
+
+local processingKey = false
+local lastTime = 0
+
+-- Main eventtap for workspace switching
+local ctrlNumberTap = hs.eventtap.new({hs.eventtap.event.types.keyDown}, function(event)
+    local flags = event:getFlags()
+    local keyCode = event:getKeyCode()
+    local currentTime = hs.timer.secondsSinceEpoch()
+    
+    if flags.ctrl and not flags.cmd and not flags.alt and not flags.shift then
+        local number = numberKeyCodes[keyCode]
+        
+        if number and not processingKey and (currentTime - lastTime) > 0.2 then
+            local monitor = determineMonitorBySpace(number)
+            
+            if monitor then
+                processingKey = true
+                lastTime = currentTime
+                
+                local activated = activateMonitorSilently(monitor)
+                
+                if activated then
+                    hs.timer.doAfter(0.01, function()
+                        verifyAndShowAlert(number, monitor)
+                        currentMonitor = monitor
+                        currentDesktop = number
+                        
+                        hs.timer.doAfter(0.5, function()
+                            processingKey = false
+                        end)
+                    end)
+                    
+                    return true
+                else
+                    processingKey = false
+                end
+            end
+        end
+    end
+    
+    return false
+end)
+
+-- =============================================================================
+-- WINDOW MOVER SYSTEM (Shift + Ctrl + Alt + Cmd + arrows)
 -- =============================================================================
 
 -- Helper function to get window and space information
@@ -140,7 +499,6 @@ local function getWindowSpaceInfo(win)
     local currentSpace = currentSpaces[1]
     local allSpaces = hs.spaces.allSpaces()
     
-    -- Find all spaces for the current monitor
     local screenSpaces = nil
     for screenUUID, spaces in pairs(allSpaces) do
         for _, spaceID in ipairs(spaces) do
@@ -156,7 +514,6 @@ local function getWindowSpaceInfo(win)
         return nil, "Only one desktop available"
     end
     
-    -- Find the index of the current space
     local currentIndex = nil
     for i, spaceID in ipairs(screenSpaces) do
         if spaceID == currentSpace then
@@ -176,91 +533,71 @@ local function getWindowSpaceInfo(win)
     }
 end
 
--- Helper function to check if movement is possible and get target index
 local function getTargetIndex(currentIndex, totalSpaces, direction)
     if direction == "next" then
         if currentIndex >= totalSpaces then
-            return nil, "at_last"  -- At the last desktop, can't go further
+            return nil, "at_last"
         end
         return currentIndex + 1, "valid"
-    else -- direction == "prev"
+    else
         if currentIndex <= 1 then
-            return nil, "at_first"  -- At the first desktop, can't go back
+            return nil, "at_first"
         end
         return currentIndex - 1, "valid"
     end
 end
 
--- Function to create visual displacement by window width
 function slideWindowByWidth(window, direction, callback)
     local originalFrame = window:frame()
     local screen = window:screen()
     local screenFrame = screen:frame()
     
-    -- Calculate final position (displace by the window's width or available space)
     local targetFrame = hs.geometry.copy(originalFrame)
     
     if direction == "right" then
-        -- Calculate available space to the right
         local availableSpace = (screenFrame.x + screenFrame.w) - (originalFrame.x + originalFrame.w)
-        -- Move by window width, available space, or minimum slide distance - whichever ensures visibility
         local displacement = math.max(MIN_SLIDE_DISTANCE, math.min(originalFrame.w, availableSpace))
         targetFrame.x = originalFrame.x + displacement
-    else -- direction == "left"
-        -- Calculate available space to the left  
+    else
         local availableSpace = originalFrame.x - screenFrame.x
-        -- Move by window width, available space, or minimum slide distance - whichever ensures visibility
         local displacement = math.max(MIN_SLIDE_DISTANCE, math.min(originalFrame.w, availableSpace))
         targetFrame.x = originalFrame.x - displacement
     end
     
-    -- Configure smooth and fast animation
     hs.window.animationDuration = SLIDE_ANIMATION_DURATION
-    
-    -- Animate the window by its width
     window:setFrame(targetFrame, hs.window.animationDuration)
     
-    -- After the animation finishes, execute callback
     hs.timer.doAfter(hs.window.animationDuration + 0.05, function()
         if callback then
-            callback(originalFrame)  -- Pass the original position to the callback
+            callback(originalFrame)
         end
     end)
 end
 
--- Function to create bounce animation when no more desktops are available
 function bounceWindow(window, direction, callback)
     local originalFrame = window:frame()
     local screen = window:screen()
     local screenFrame = screen:frame()
     
-    -- Calculate bounce position
     local bounceFrame = hs.geometry.copy(originalFrame)
     
     if direction == "right" then
-        -- Bounce to the right, but respect screen boundaries
         local availableSpace = (screenFrame.x + screenFrame.w) - (originalFrame.x + originalFrame.w)
         local bounceDistance = math.min(BOUNCE_DISTANCE, availableSpace)
         bounceFrame.x = originalFrame.x + bounceDistance
-    else -- direction == "left"
-        -- Bounce to the left, but respect screen boundaries
+    else
         local availableSpace = originalFrame.x - screenFrame.x
         local bounceDistance = math.min(BOUNCE_DISTANCE, availableSpace)
         bounceFrame.x = originalFrame.x - bounceDistance
     end
     
-    -- Configure bounce animation
     hs.window.animationDuration = BOUNCE_ANIMATION_DURATION
-    
-    -- First animation: bounce out
     window:setFrame(bounceFrame, hs.window.animationDuration)
     
-    -- Second animation: return to original position
     hs.timer.doAfter(BOUNCE_ANIMATION_DURATION + 0.02, function()
         hs.window.animationDuration = BOUNCE_RETURN_DURATION
         window:setFrame(originalFrame, hs.window.animationDuration)
         
-        -- Execute callback after bounce is complete
         hs.timer.doAfter(BOUNCE_RETURN_DURATION + 0.02, function()
             if callback then
                 callback()
@@ -269,79 +606,62 @@ function bounceWindow(window, direction, callback)
     end)
 end
 
--- Generic function to move window to desktop with optional visual effect
 local function moveWindowToDesktop(direction, withVisualEffect)
     local win = hs.window.focusedWindow()
     
     local spaceInfo, errorMsg = getWindowSpaceInfo(win)
     if not spaceInfo then
         if errorMsg and withVisualEffect then
-            -- Use canvas alert instead of hs.alert.show
-            showCanvasAlert(errorMsg, win and win:screen(), ALERT_DURATION)
+            showCanvasAlert(errorMsg, win and win:screen(), ALERT_DURATION, "window")
         end
         return
     end
     
     local targetIndex, status = getTargetIndex(spaceInfo.currentIndex, #spaceInfo.screenSpaces, direction)
     
-    -- If movement is not possible, show bounce animation
     if status ~= "valid" then
         if withVisualEffect then
             local slideDirection = (direction == "next") and "right" or "left"
-            
             bounceWindow(win, slideDirection, function()
                 -- Only bounce effect, no message
             end)
-        else
-            -- For fast version, do nothing (no bounce, no message)
         end
         return
     end
     
-    -- Continue with normal movement if valid
     local targetSpace = spaceInfo.screenSpaces[targetIndex]
     local originalFrame = win:frame()
     local windowScreen = win:screen()
     
-    -- Determine control key for desktop transition
     local controlKey = (direction == "next") and "right" or "left"
     
-    -- Function to execute after slide (or immediately for fast version)
     local executeTransition = function(frameToRestore)
-        -- Move the window to the target space
         hs.spaces.moveWindowToSpace(win, targetSpace)
-        
-        -- Execute desktop transition
         hs.eventtap.keyStroke({"ctrl"}, controlKey, 0)
         
-        -- After transition, reposition the window and show message in destination desktop
         hs.timer.doAfter(DESKTOP_TRANSITION_DELAY, function()
             win:setFrame(frameToRestore, withVisualEffect and 0.1 or 0.05)
             
             hs.timer.doAfter(WINDOW_FOCUS_DELAY, function()
                 win:focus()
-                -- Show visual feedback in the destination desktop using canvas
                 local alertDelay = withVisualEffect and ALERT_DELAY or 0.1
                 hs.timer.doAfter(alertDelay, function()
-                    -- Use canvas alert instead of hs.alert.show
-                    showCanvasAlert(string.format("Desktop %d", targetIndex), windowScreen, ALERT_DURATION)
+                    showCanvasAlert(string.format("Desktop %d", targetIndex), windowScreen, ALERT_DURATION, "window")
                 end)
             end)
         end)
     end
     
     if withVisualEffect then
-        -- Execute with visual displacement
         local slideDirection = (direction == "next") and "right" or "left"
         slideWindowByWidth(win, slideDirection, executeTransition)
     else
-        -- Execute fast transition without visual effect
         hs.window.animationDuration = FAST_ANIMATION_DURATION
         executeTransition(originalFrame)
     end
 end
 
--- Main functions using the generic function
+-- Window movement functions
 function moveWindowToNextDesktop()
     moveWindowToDesktop("next", true)
 end
@@ -359,38 +679,76 @@ function moveWindowToPrevDesktopFast()
 end
 
 -- =============================================================================
--- KEYBOARD SHORTCUTS
+-- INITIALIZATION AND CONTROL
 -- =============================================================================
 
--- Configure main keyboard shortcuts (WITH visual displacement)
--- shift + ctrl + opt + cmd + right arrow
-hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "right", function()
-    moveWindowToNextDesktop()  -- WITH visual displacement to the right edge
+-- Configure space watcher with canvas cleanup
+spaceWatcher = hs.spaces.watcher.new(function()
+    onSpaceChange()
+    if #activeCanvas > 0 then
+        hs.timer.doAfter(0.1, clearAllCanvas)
+    end
 end)
 
--- shift + ctrl + opt + cmd + left arrow
-hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "left", function()
-    moveWindowToPrevDesktop()  -- WITH visual displacement to the left edge
-end)
+-- Start systems
+ctrlNumberTap:start()
+spaceWatcher:start()
+getSpacesPerMonitor()
 
--- Alternative shortcuts for fast versions (WITHOUT visual displacement)
--- shift + ctrl + opt + cmd + up arrow (fast to next)
-hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "up", function()
-    moveWindowToNextDesktopFast()  -- WITHOUT visual displacement
-end)
+-- Configure keyboard shortcuts for window mover
+hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "right", moveWindowToNextDesktop)
+hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "left", moveWindowToPrevDesktop)
+hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "up", moveWindowToNextDesktopFast)
+hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "down", moveWindowToPrevDesktopFast)
 
--- shift + ctrl + opt + cmd + down arrow (fast to previous)
-hs.hotkey.bind({"shift", "ctrl", "alt", "cmd"}, "down", function()
-    moveWindowToPrevDesktopFast()  -- WITHOUT visual displacement
-end)
-
--- =============================================================================
--- CONTROL FUNCTIONS
--- =============================================================================
-
--- Window mover control functions
-hs.windowMover = {
+-- Control interfaces
+hs.ctrlListener = {
+    stop = function()
+        ctrlNumberTap:stop()
+        print("Workspace switcher stopped")
+    end,
+    restart = function()
+        ctrlNumberTap:stop()
+        ctrlNumberTap:start()
+        processingKey = false
+        lastTime = 0
+        print("Workspace switcher restarted")
+    end,
+    status = function()
+        print("Workspace Switcher Status:")
+        print("- Monitor:", currentMonitor)
+        print("- Desktop:", currentDesktop)
+        print("- Processing:", processingKey)
+        print("- Active canvas:", #activeCanvas)
+        print("- Spaces per monitor:", table.concat(spacesPerMonitor, ", "))
+    end,
+    test = function(number)
+        local monitor = determineMonitorBySpace(number)
+        if monitor then
+            print("Testing Desktop", number, "on Monitor", monitor)
+            activateMonitorSilently(monitor)
+            hs.timer.doAfter(0.02, function()
+                verifyAndShowAlert(number, monitor)
+            end)
+        else
+            print("Desktop", number, "does not exist")
+        end
+    end,
     clearCanvas = clearCanvas,
+    checkShortcuts = function()
+        print("Checking all desktop shortcuts...")
+        for i = 1, 9 do
+            if determineMonitorBySpace(i) then
+                hs.timer.doAfter(i * 0.5, function()
+                    hs.ctrlListener.test(i)
+                end)
+            end
+        end
+    end,
+    openShortcutSettings = openMissionControlShortcuts
+}
+
+hs.windowMover = {
     moveNext = moveWindowToNextDesktop,
     movePrev = moveWindowToPrevDesktop,
     moveNextFast = moveWindowToNextDesktopFast,
@@ -398,9 +756,9 @@ hs.windowMover = {
     test = function()
         local win = hs.window.focusedWindow()
         if win then
-            showCanvasAlert("Window Mover Test", win:screen(), 2.0)
+            showCanvasAlert("Window Mover Test", win:screen(), 2.0, "window")
         else
-            showCanvasAlert("No focused window", nil, 2.0)
+            showCanvasAlert("No focused window", nil, 2.0, "window")
         end
     end,
     status = function()
@@ -413,19 +771,31 @@ hs.windowMover = {
         else
             print("- No focused window")
         end
-    end
+    end,
+    clearCanvas = clearCanvas
 }
 
--- Additional configuration to optimize transitions
-hs.window.animationDuration = FAST_ANIMATION_DURATION  -- Faster animations globally
+-- Optimize animations globally
+hs.window.animationDuration = FAST_ANIMATION_DURATION
 
--- Clean canvas when reloading script
+-- Clean canvas on reload
 clearAllCanvas()
 
--- Confirmation message when loading the script
--- print("=== WINDOW MOVER WITH CANVAS ALERTS LOADED ===")
--- print("• shift + ctrl + alt + cmd + arrows: Move with animation")
--- print("• shift + ctrl + alt + cmd + up/down: Fast move")
--- print("• Use hs.windowMover.test() to test canvas")
--- print("• Use hs.windowMover.clearCanvas() to clear stuck canvas")
--- print("====================================================")
+-- Confirmation messages
+print("=== UNIFIED WORKSPACE & WINDOW MOVER LOADED (ENHANCED) ===")
+print("WORKSPACE SWITCHER:")
+print("• Ctrl + 1-9: Switch to desktop on appropriate monitor")
+print("• Automatically detects disabled shortcuts")
+print("• Opens System Preferences when shortcuts are disabled")
+print("• Use hs.ctrlListener.test(number) to test")
+print("• Use hs.ctrlListener.checkShortcuts() to test all")
+print("• Use hs.ctrlListener.openShortcutSettings() to open settings")
+print("")
+print("WINDOW MOVER:")
+print("• Shift + Ctrl + Alt + Cmd + arrows: Move with animation")
+print("• Shift + Ctrl + Alt + Cmd + up/down: Fast move")
+print("• Use hs.windowMover.test() to test")
+print("")
+print("SHARED:")
+print("• Use clearCanvas() to clear stuck canvas")
+print("=======================================================")
