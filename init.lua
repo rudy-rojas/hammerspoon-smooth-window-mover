@@ -1,5 +1,5 @@
 -- =============================================================================
--- UNIFIED WORKSPACE & WINDOW MOVER SCRIPT - ENHANCED VERSION
+-- UNIFIED WORKSPACE & WINDOW MOVER SCRIPT - Version 1.1 For macOS Monterrey
 -- =============================================================================
 -- Combines workspace switcher (Ctrl+number) and window mover (Shift+Ctrl+Alt+Cmd+arrows)
 
