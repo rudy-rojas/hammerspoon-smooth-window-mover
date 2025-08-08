@@ -1,5 +1,6 @@
 -- =============================================================================
--- UNIFIED WORKSPACE & WINDOW MOVER SCRIPT - Version 1.1 For macOS Monterrey
+-- UNIFIED WORKSPACE & WINDOW MOVER SCRIPT - Version 1.5 Tested in macOS Ventura (13.7.6)
+-- In theory, it should also work on earlier versions.
 -- =============================================================================
 -- Combines workspace switcher (Ctrl+number) and window mover (Shift+Ctrl+Alt+Cmd+arrows)
 
@@ -499,7 +500,8 @@ local function getWindowSpaceInfo(win)
     
     local currentSpaces = hs.spaces.windowSpaces(win)
     if not currentSpaces or #currentSpaces == 0 then
-        return nil, "Could not get current space"
+        -- return nil, "Could not get current space"
+        return nil
     end
     
     local currentSpace = currentSpaces[1]
@@ -560,18 +562,18 @@ function slideWindowByWidth(window, direction, callback)
     
     local targetFrame = hs.geometry.copy(originalFrame)
     
-    if direction == "right" then
-        local availableSpace = (screenFrame.x + screenFrame.w) - (originalFrame.x + originalFrame.w)
-        local displacement = math.max(MIN_SLIDE_DISTANCE, math.min(originalFrame.w, availableSpace))
-        targetFrame.x = originalFrame.x + displacement
-    else
-        local availableSpace = originalFrame.x - screenFrame.x
-        local displacement = math.max(MIN_SLIDE_DISTANCE, math.min(originalFrame.w, availableSpace))
-        targetFrame.x = originalFrame.x - displacement
-    end
+    -- if direction == "right" then
+    --     local availableSpace = (screenFrame.x + screenFrame.w) - (originalFrame.x + originalFrame.w)
+    --     local displacement = math.max(MIN_SLIDE_DISTANCE, math.min(originalFrame.w, availableSpace))
+    --     targetFrame.x = originalFrame.x + displacement
+    -- else
+    --     local availableSpace = originalFrame.x - screenFrame.x
+    --     local displacement = math.max(MIN_SLIDE_DISTANCE, math.min(originalFrame.w, availableSpace))
+    --     targetFrame.x = originalFrame.x - displacement
+    -- end
     
-    hs.window.animationDuration = SLIDE_ANIMATION_DURATION
-    window:setFrame(targetFrame, hs.window.animationDuration)
+    -- hs.window.animationDuration = SLIDE_ANIMATION_DURATION
+    -- window:setFrame(targetFrame, hs.window.animationDuration)
     
     hs.timer.doAfter(hs.window.animationDuration + 0.05, function()
         if callback then
@@ -588,13 +590,11 @@ function bounceWindow(window, direction, callback)
     local bounceFrame = hs.geometry.copy(originalFrame)
     
     if direction == "right" then
-        local availableSpace = (screenFrame.x + screenFrame.w) - (originalFrame.x + originalFrame.w)
-        local bounceDistance = math.min(BOUNCE_DISTANCE, availableSpace)
-        bounceFrame.x = originalFrame.x + bounceDistance
+        -- Always bounce right by the full BOUNCE_DISTANCE, even if it goes beyond screen
+        bounceFrame.x = originalFrame.x + BOUNCE_DISTANCE
     else
-        local availableSpace = originalFrame.x - screenFrame.x
-        local bounceDistance = math.min(BOUNCE_DISTANCE, availableSpace)
-        bounceFrame.x = originalFrame.x - bounceDistance
+        -- Always bounce left by the full BOUNCE_DISTANCE, even if it goes beyond screen
+        bounceFrame.x = originalFrame.x - BOUNCE_DISTANCE
     end
     
     hs.window.animationDuration = BOUNCE_ANIMATION_DURATION
@@ -639,22 +639,51 @@ local function moveWindowToDesktop(direction, withVisualEffect)
     local originalFrame = win:frame()
     local windowScreen = win:screen()
     
-    local controlKey = (direction == "next") and "right" or "left"
-    
     local executeTransition = function(frameToRestore)
-        hs.spaces.moveWindowToSpace(win, targetSpace)
-        hs.eventtap.keyStroke({"ctrl"}, controlKey, 0)
+        -- Use AppleScript with cliclick for macOS Ventura compatibility
+        local keyCode = (direction == "next") and "124" or "123"  -- 124 = right arrow, 123 = left arrow
+        local script = string.format([[
+            -- Ajusta la altura estimada de la barra de título
+            property titleBarHeight : 20
+            tell application "System Events"
+                -- Detectar la app y ventana activa
+                set frontApp to name of first application process whose frontmost is true
+                tell application process frontApp
+                    try
+                        set {xPos, yPos} to position of window 1
+                        set {winWidth, winHeight} to size of window 1
+                    on error
+                        return
+                    end try
+                end tell
+            end tell
+            -- Calcular posición central de la barra de título
+            set clickX to xPos + (winWidth / 2)
+            set clickY to yPos + 5
+            -- Convertir a enteros (cliclick no acepta decimales)
+            set clickX to round clickX rounding as taught in school
+            set clickY to round clickY rounding as taught in school
+            -- Mover el ratón y hacer clic sostenido
+            do shell script "/opt/local/bin/cliclick m:" & clickX & "," & clickY
+            delay 0.05
+            do shell script "/opt/local/bin/cliclick dd:" & clickX & "," & clickY
+            -- Mientras está presionado, enviar ctrl+arrow
+            tell application "System Events"
+                key down control
+                key code %s
+                key up control
+            end tell
+            -- Soltar clic
+            delay 0.2
+            do shell script "/opt/local/bin/cliclick du:" & clickX & "," & clickY
+        ]], keyCode)
         
-        hs.timer.doAfter(DESKTOP_TRANSITION_DELAY, function()
-            win:setFrame(frameToRestore, withVisualEffect and 0.1 or 0.05)
-            
-            hs.timer.doAfter(WINDOW_FOCUS_DELAY, function()
-                win:focus()
-                local alertDelay = withVisualEffect and ALERT_DELAY or 0.1
-                hs.timer.doAfter(alertDelay, function()
-                    showCanvasAlert(string.format("Desktop %d", targetIndex), windowScreen, ALERT_DURATION, "window")
-                end)
-            end)
+        hs.osascript.applescript(script)
+        
+        -- Wait for the transition to complete, then show alert
+        hs.timer.doAfter(0.8, function()
+            -- Show the alert on the new desktop (targetIndex)
+            showCanvasAlert(string.format("Desktop %d", targetIndex), windowScreen, ALERT_DURATION, "window")
         end)
     end
     
@@ -674,14 +703,6 @@ end
 
 function moveWindowToPrevDesktop()
     moveWindowToDesktop("prev", true)
-end
-
-function moveWindowToNextDesktopFast()
-    moveWindowToDesktop("next", false)
-end
-
-function moveWindowToPrevDesktopFast()
-    moveWindowToDesktop("prev", false)
 end
 
 -- =============================================================================
@@ -704,8 +725,6 @@ getSpacesPerMonitor()
 -- Configure keyboard shortcuts for window mover
 hs.hotkey.bind(WINDOW_MOVER_MODIFIERS, "right", moveWindowToNextDesktop)
 hs.hotkey.bind(WINDOW_MOVER_MODIFIERS, "left", moveWindowToPrevDesktop)
-hs.hotkey.bind(WINDOW_MOVER_MODIFIERS, "up", moveWindowToNextDesktopFast)
-hs.hotkey.bind(WINDOW_MOVER_MODIFIERS, "down", moveWindowToPrevDesktopFast)
 
 -- Control interfaces
 hs.ctrlListener = {
@@ -757,8 +776,6 @@ hs.ctrlListener = {
 hs.windowMover = {
     moveNext = moveWindowToNextDesktop,
     movePrev = moveWindowToPrevDesktop,
-    moveNextFast = moveWindowToNextDesktopFast,
-    movePrevFast = moveWindowToPrevDesktopFast,
     test = function()
         local win = hs.window.focusedWindow()
         if win then
@@ -798,8 +815,7 @@ print("• Use hs.ctrlListener.checkShortcuts() to test all")
 print("• Use hs.ctrlListener.openShortcutSettings() to open settings")
 print("")
 print("WINDOW MOVER:")
-print("• Shift + Ctrl + Alt + Cmd + arrows: Move with animation")
-print("• Shift + Ctrl + Alt + Cmd + up/down: Fast move")
+print("• Shift + Ctrl + Alt + Cmd + right/left: Move window with animation")
 print("• Use hs.windowMover.test() to test")
 print("")
 print("SHARED:")

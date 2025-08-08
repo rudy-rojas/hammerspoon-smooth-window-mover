@@ -1,49 +1,47 @@
-# Hammerspoon Smooth Window Mover
+# Hammerspoon Smooth Window Mover V1.5
 
-A smooth and elegant macOS window management tool that moves windows between desktops with beautiful horizontal slide animations.
 
-![macOS](https://img.shields.io/badge/macOS-10.12+-blue)
+A powerful macOS automation script for **Hammerspoon** that combines:
+- **Workspace Switcher** (`Ctrl + 1–9`) – Jump instantly to a specific desktop/space with visual feedback.
+- **Window Mover** (`⇧⌃⌥⌘ + ←/→`) – Move the focused window between desktops with smooth animations and bounce effects.
+
+
+![macOS](https://img.shields.io/badge/macOS-13.7+-blue)
 ![Hammerspoon](https://img.shields.io/badge/Hammerspoon-0.9.93+-green)
+![License](https://img.shields.io/badge/cliclick-5.0.1-yellow)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## ✨ Features
 
-- **Smooth Visual Transitions**: Windows slide horizontally before moving to the next desktop
-- **Native macOS Integration**: Uses system `Ctrl + Arrow` transitions for authentic feel
-- **Fast Alternative**: Quick movement options without visual effects
-- **Lightweight**: Minimal resource usage
+- **Dual Functionality**: Workspace switching + window moving in one script.
+- **Multi-Monitor Support**: Detects and organizes spaces per monitor.
+- **Smooth Visual Alerts**: Overlay notifications for both workspace and window actions.
+- **Shortcut Health Check**: Detects if macOS Mission Control shortcuts are disabled and opens System Preferences automatically.
+- **Customizable Keys**: Easily change hotkey combinations in the script.
 
-## 🎬 How It Works
-
-When you trigger the hotkey:
-1. **Window slides horizontally** by its own width (smooth animation)
-2. **Desktop transition executes** using native macOS `Ctrl + Arrow`
-3. **Window appears** in the new desktop at its original position
-4. **Focus restored** automatically
 
 ## 🚀 Installation
 
-### Step 1: Install Hammerspoon
+### 1. Install Hammerspoon
+Download from [hammerspoon.org](https://www.hammerspoon.org/) and move it to your **Applications** folder.
 
-#### Option A: Download from Website
-1. Visit [hammerspoon.org](https://www.hammerspoon.org/)
-2. Download the latest release
-3. Move Hammerspoon.app to Applications folder
-4. Launch Hammerspoon and grant necessary permissions
-
-#### Option B: Using Homebrew
+### 2. Install `cliclick` (MacPorts)
+Required for window dragging compatibility on macOS Ventura and later:
 ```bash
-brew install --cask hammerspoon
-```
+sudo port install cliclick
+``` 
 
-### Step 2: Configure Hammerspoon
+### 3. Configure Hammerspoon
+Open the Hammerspoon config folder:
+Replace or append the contents of ~/.hammerspoon/init.lua with the script from this repository.
+Reload Hammerspoon:
 
 1. **Launch Hammerspoon** from Applications
 2. **Grant permissions** when prompted:
    - Accessibility (required for window management)
    - Screen Recording (required for window snapshots)
 
-### Step 3: Install the Script
+### 4: Install the Script
 
 1. **Open Hammerspoon Configuration Directory**
    - Click the Hammerspoon icon in the menu bar
@@ -59,23 +57,9 @@ brew install --cask hammerspoon
    - Click the Hammerspoon icon in the menu bar
    - Select **"Reload Config"** from the dropdown menu
 
-4. **Verify Installation**
-   - Try the keyboard shortcut: <kbd>⇧</kbd> + <kbd>⌃</kbd> + <kbd>⌥</kbd> + <kbd>⌘</kbd> + <kbd>→</kbd>
-   - You should see your active window slide to the right and move to the next desktop
-
 > 💡 **Pro Tip**: After making any changes to `init.lua`, always use **"Reload Config"** to apply the changes immediately.
 
-## ⌨️ Default Keyboard Shortcuts
-
-### Main Functions (WITH visual slide animation)
--Type on a keyboard: **<kbd>⇧</kbd> + <kbd>⌃</kbd> + <kbd>⌥</kbd> + <kbd>⌘</kbd> + <kbd>→</kbd>**: Move window to next desktop (slide right)
--Type on a keyboard **<kbd>⇧</kbd> + <kbd>⌃</kbd> + <kbd>⌥</kbd> + <kbd>⌘</kbd> + <kbd>←</kbd>**: Move window to previous desktop (slide left)
-
-### Fast Functions (WITHOUT visual animation)
--Type on a keyboard **<kbd>⇧</kbd> + <kbd>⌃</kbd> + <kbd>⌥</kbd> + <kbd>⌘</kbd> + <kbd>↑</kbd>**: Quick move to next desktop
--Type on a keyboard **<kbd>⇧</kbd> + <kbd>⌃</kbd> + <kbd>⌥</kbd> + <kbd>⌘</kbd> + <kbd>↓</kbd>**: Quick move to previous desktop
-
-## 🛠️ Customization
+## ⌨️ Keyboard Shortcuts
 
 ### Changing Keyboard Shortcuts
 
@@ -83,39 +67,16 @@ Edit the bottom section of `init.lua`:
 
 ```lua
 -- Custom shortcuts example
-hs.hotkey.bind({"shift", "ctrl"}, "right", function()
-    moveWindowToNextDesktop()
-end)
-
-hs.hotkey.bind({"shift", "ctrl"}, "left", function()
-    moveWindowToPrevDesktop()
-end)
-```
-
-**Result**: <kbd>⇧</kbd> + <kbd>⌃</kbd> + <kbd>→</kbd> and <kbd>⇧</kbd> + <kbd>⌃</kbd> + <kbd>←</kbd>
-
-### Adjusting Animation Speed
-
-Modify the animation duration:
-
-```lua
--- Constants
-local SLIDE_ANIMATION_DURATION = 0.2
-local FAST_ANIMATION_DURATION = 0.08
-local BOUNCE_ANIMATION_DURATION = 0.15
-local BOUNCE_RETURN_DURATION = 0.12
-local DESKTOP_TRANSITION_DELAY = 0.05
-local WINDOW_FOCUS_DELAY = 0.15
-local ALERT_DELAY = 0.50
-local ALERT_DURATION = 0.8
-local BOUNCE_DISTANCE = 60  -- Distance for bounce animation in pixels
-local MIN_SLIDE_DISTANCE = 50  -- Minimum slide displacement when near screen edges
+-- local WINDOW_MOVER_MODIFIERS = {"shift", "ctrl", "alt", "cmd"} --DEFAULT
+-- local WINDOW_MOVER_MODIFIERS = {"shift", "ctrl"} -- example
+local WINDOW_MOVER_MODIFIERS = {"shift", "ctrl", "alt", "cmd"}
+showAlert = true
 ```
 
 
 ## 📋 Requirements
 
-- **macOS 10.12+** (Sierra or later)
+- **macOS 13 (Ventura or later) (tested in 13.7.6)
 - **Hammerspoon 0.9.93+**
 - **Multiple Desktops/Spaces** configured in System Preferences
 - **Accessibility permissions** for Hammerspoon
